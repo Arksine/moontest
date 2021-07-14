@@ -1228,6 +1228,12 @@ class KlippyWebsocket {
                 this._set_callbacks();
             }).fail(() => {
                 console.log("Failed to retreive oneshot token");
+                if (this.reconnect) {
+                    setTimeout(() => {
+                        if (this.reconnect)
+                            this.connect();
+                    }, 1000);
+                }
             })
         } else {
             this.ws = new WebSocket(this.base_address + "/websocket");
