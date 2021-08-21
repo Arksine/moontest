@@ -371,7 +371,8 @@ function get_klippy_info() {
                             heater_bed: null,
                             extruder: ["temperature", "target"],
                             fan: null,
-                            print_stats: null}
+                            print_stats: null,
+                            motion_report: null,}
                         };
                     add_subscription(sub);
                 } else {
@@ -1841,7 +1842,7 @@ window.onload = () => {
         if (api_type == 'http') {
             let qs = "?gcode_move=gcode_position,speed,speed_factor,extrude_factor" +
                     "&toolhead&virtual_sdcard&heater_bed&extruder=temperature,target&fan&idle_timeout&pause_resume"  +
-                    "&print_stats";
+                    "&print_stats&motion_report";
             form_post_request(api.object_subscription.url, qs);
         } else {
             const sub = {
@@ -1854,7 +1855,8 @@ window.onload = () => {
                     heater_bed: null,
                     extruder: ["temperature", "target"],
                     fan: null,
-                    print_stats: null}
+                    print_stats: null,
+                    motion_report: null}
                 };
             add_subscription(sub);
         }
