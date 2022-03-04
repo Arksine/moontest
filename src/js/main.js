@@ -249,7 +249,7 @@ function update_error(cmd, msg) {
     console.log("Error processing " + cmd +": " + msg);
 }
 
-function handle_klippy_state(state) {
+function process_klippy_state(state) {
     // Klippy state can be "ready", "disconnect", and "shutdown".  This
     // differs from Printer State in that it represents the status of
     // the Host software
@@ -339,23 +339,23 @@ function get_file_list(root) {
     });
 }
 
-function get_klippy_info() {
-    // A "get_klippy_info" websocket request.  It returns
+function get_server_info() {
+    // A "get_server_info" websocket request.  It returns
     // the hostname (which should be equal to location.host), the
     // build version, and if the Host is ready for commands.  Its a
     // good idea to fetch this information after the websocket connects.
     // If the Host is in a "ready" state, we can do some initialization
-    json_rpc.call_method(api.printer_info.method)
+    json_rpc.call_method(api.server_info.method)
     .then((result) => {
-
         if (websocket.id == null)
-            get_websocket_id();
+            connection_identify();
 
-        if (result.state == "ready") {
+        if (result.klippy_state != "disconnected")
+            get_klippy_info();
+        if (result.klippy_state == "ready") {
             if (!klippy_ready) {
-                update_term("Klippy Hostname: " + result.hostname +
-                    " | CPU: " + result.cpu_info +
-                    " | Build Version: " + result.software_version);
+                // Klippy was ready when we connected, print klippy info and
+                // initialize state
                 klippy_ready = true;
 
                 // Add our subscriptions the the UI is configured to do so.
@@ -380,26 +380,38 @@ function get_klippy_info() {
                 }
             }
         } else {
-            if (result.state == "error") {
-                update_term(result.state_message);
-            } else {
-                update_term("Waiting for Klippy ready status...");
-            }
-            console.log("Klippy Not Ready, checking again in 2s: ");
-            setTimeout(() => {
-                get_klippy_info();
-            }, 2000);
+            // Klippy isn't ready, we can wait
+            let msg = "Waiting for Klippy ready event..."
+            update_term(msg);
+            console.log(msg);
         }
-
     })
     .catch((error) => {
-        update_error(api.printer_info.method, error);
-        setTimeout(() => {
-            get_klippy_info();
-        }, 2000);
+        update_error(api.server_info.method, error);
     });
 }
 
+function get_klippy_info() {
+    // A "get_klippy_info" websocket request.  It returns
+    // the hostname  the build version, etc.  Its a good idea to fetch
+    // this information after the websocket connects
+    json_rpc.call_method(api.printer_info.method)
+    .then((result) => {
+        update_term("Klippy Hostname: " + result.hostname +
+            " | CPU: " + result.cpu_info +
+            " | Build Version: " + result.software_version);
+        if (result.state == "error") {
+            update_term(result.state_message);
+        } else {
+            update_term(`Current Klippy State: ${result.state}`);
+        }
+    })
+    .catch((error) => {
+        update_error(api.printer_info.method, error);
+    });
+}
+
+// Deprecated Method
 function get_websocket_id() {
     json_rpc.call_method("server.websocket.id")
     .then((result) => {
@@ -410,6 +422,25 @@ function get_websocket_id() {
     })
     .catch((error) => {
         update_error("server.websocket.id", error);
+    });
+}
+
+function connection_identify() {
+    let args = {
+        client_name: "moontest",
+        version: "0.0.1",
+        type: "web",
+        url: "https://github.com/arksine/moontest"
+    };
+    json_rpc.call_method_with_kwargs("server.connection.identify", args)
+    .then((result) => {
+        // result is an "ok" acknowledgment that the gcode has
+        // been successfully processed
+        websocket.id = result.connection_id;
+        console.log(`Websocket ID Received: ${result.connection_id}`);
+    })
+    .catch((error) => {
+        update_error("server.connection.identify", error);
     });
 }
 
@@ -750,7 +781,7 @@ function handle_status_update(status) {
                     }
                     break;
                 case "webhooks.state":
-                    handle_klippy_state(val);
+                    process_klippy_state(val);
                 default:
                     update_streamdiv(name, attr, val);
 
@@ -774,7 +805,7 @@ json_rpc.register_method("notify_klippy_disconnected", handle_klippy_disconnecte
 function handle_klippy_ready() {
     update_term("Klippy Is READY");
     console.log("Klippy Ready Recieved");
-    get_klippy_info();
+    get_server_info();
 }
 json_rpc.register_method("notify_klippy_ready", handle_klippy_ready);
 
@@ -1299,16 +1330,12 @@ function create_websocket(url) {
         websocket.close()
     websocket = new KlippyWebsocket(ws_url);
     websocket.onopen = () => {
-        // Depending on the state of the printer, all enpoints may not be
-        // available when the websocket is first opened.  The "get_klippy_info"
+        // Depending on the state of Klippy, all endpoints may not be
+        // available when the websocket is first opened.  The "get_server_info"
         // method is available, and should be used to determine if Klipper is
         // in the "ready" state.  When Klipper is "ready", all endpoints should
         // be registered and available.
-
-        // These could be implemented JSON RPC Batch requests and send both
-        // at the same time, however it is easier to simply do them
-        // individually
-        get_klippy_info();
+        get_server_info();
     };
     json_rpc.register_transport(websocket);
 }
