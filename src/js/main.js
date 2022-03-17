@@ -157,6 +157,20 @@ var api = {
     },
     reset_password: {
         url: "/access/user/password"
+    },
+
+    // Announcements APIs
+    list_announcements: {
+        url: "/server/announcements/list",
+        method: "server.announcements.list"
+    },
+    update_announcements: {
+        url: "/server/announcemets/update",
+        method: "server.announcements.update"
+    },
+    dismiss_announcement: {
+        url: "/server/announcements/dismiss",
+        method: "server.announcements.dismiss"
     }
 }
 
@@ -323,6 +337,23 @@ async function calculate_checksum(file) {
         return checksum;
     }
 }
+
+function refresh_announcements(entries) {
+    $("#announcement_list").empty()
+    let show_now = false;
+    for (const entr of entries) {
+        if (entr.priority == "high")
+            // TODO: highlight
+            show_now = true;
+        let eid = entr.entry_id.replace("/", "-")
+        let start = '<div id="announcement-' + eid + '">';
+        let title = "<div>" + entr.title + "</div>";
+        let desc = "<div>" + entr.description + "</div>";
+        $("#announcement_list").append(start + title + desc + "</div>");
+    }
+    if (show_now)
+        $("#do_announce").click();
+}
 //***********End UI Update Functions****************/
 
 //***********Websocket-Klipper API Functions (JSON-RPC)************/
@@ -349,6 +380,8 @@ function get_server_info() {
     .then((result) => {
         if (websocket.id == null)
             connection_identify();
+
+        list_announcements();
 
         if (result.klippy_state != "disconnected")
             get_klippy_info();
@@ -726,6 +759,42 @@ function reboot() {
 
 function shutdown() {
     json_rpc.notify(api.shutdown.method);
+}
+
+function list_announcements() {
+    json_rpc.call_method(api.list_announcements.method)
+    .then((result) => {
+        console.log(result)
+        refresh_announcements(result.entries);
+    })
+    .catch((error) => {
+        update_error(api.list_announcements.method, error);
+    });
+}
+
+function update_announcements() {
+    json_rpc.call_method(api.update_announcements.method)
+    .then((result) => {
+        console.log(result)
+        if (result.changed) {
+            refresh_announcements(result.entries);
+        }
+    })
+    .catch((error) => {
+        update_error(api.update_announcements.method, error);
+    });
+}
+
+function dismiss_announcement(entry_id) {
+    args = {"entry_id": entry_id}
+    json_rpc.call_method_with_kwargs(api.dismiss_announcement.method, args)
+    .then((result) => {
+        console.log(result);
+        // TODO: Remove entry from announcment list
+    })
+    .catch((error) => {
+        update_error(api.dismiss_announcement.method, error);
+    });
 }
 
 //***********End Websocket-Klipper API Functions (JSON-RPC)********/
@@ -1336,6 +1405,7 @@ function create_websocket(url) {
         // in the "ready" state.  When Klipper is "ready", all endpoints should
         // be registered and available.
         get_server_info();
+
     };
     json_rpc.register_transport(websocket);
 }
@@ -2112,6 +2182,24 @@ window.onload = () => {
         else
             alert("Invalid username/password");
         return false;
+    });
+
+    // Announcment setup
+
+    $('#btnannouncements').click(() => {
+        $("#do_announce").click();
+    });
+
+    $("#do_announce").leanModal({
+        top : 200,
+        overlay : 0.4,
+        closeButton: "#announcement_close"
+    });
+
+
+    $("#announcement_close").click(() => {
+        //$("#login_username").val("");
+        $("#nav_home").click();
     });
 
     check_authorization();
