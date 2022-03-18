@@ -3,6 +3,7 @@
 <head>
 <link rel="stylesheet" href="dist/themes/default/style.min.css"/>
 <link rel="stylesheet" href="css/login_dialog.css"/>
+<link rel="stylesheet" href="css/announcements.css"/>
 <script src="//cdn.jsdelivr.net/npm/sha256-uint8array/dist/sha256-uint8array.min.js"></script>
 <script src="//ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
 <script src="dist/jstree.min.js"></script>
@@ -205,17 +206,13 @@ Progress: <progress id="progressbar" value="0" max="100"></progress>
 </div>
 
 <a id="do_announce" rel="leanModal" name="announce" href="#announcements" hidden></a>
-<div id="announcements" class="user">
+<div id="announcements" class="announcement">
     <div id="announcements-ct">
-        <div id="changepass-header" class="user-header">
+        <div id="announce-header" class="anheader">
             <h2>Announcements</h2>
             <button id="announcement_close" class="modal_close"></button>
         </div>
-        <div id="announcement_list"></div>
-        <div class="button-field">
-            <button type="Dismiss" class="user-button">Dismiss</button>
-        </div>
-
+        <div id="announcement_list" class="list"></div>
     </div>
 </div>
 

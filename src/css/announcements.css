@@ -1,0 +1,107 @@
+.announcement {
+    width: 600px;
+    padding-bottom: 2px;
+    display:none;
+    background: #FFF;
+    border-radius: 5px;
+    -moz-border-radius: 5px;
+    -webkit-border-radius: 5px;
+    box-shadow: 0px 0px 4px rgba(0,0,0,0.7);
+    -webkit-box-shadow: 0 0 4px rgba(0,0,0,0.7);
+    -moz-box-shadow: 0 0px 4px rgba(0,0,0,0.7);
+}
+
+.announcement .anheader {
+    /*background: url(../img/hd-bg.png);*/
+    background: #425beb;
+    padding: 8px 8px 8px 8px;
+    border-bottom: 1px solid #CCC;
+    border-top-left-radius: 5px;
+    -moz-border-radius-topleft: 5px;
+    -webkit-border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    -moz-border-radius-topright: 5px;
+    -webkit-border-top-right-radius: 5px;
+}
+
+.announcement .anheader h2 {
+    color: rgb(230, 230, 230);
+    font-size: 1.2em;
+    font-weight: 600;
+    margin-bottom: 3px;
+}
+
+.announcement .anheader p {
+    color: #444;
+    font-size: 1em;
+    margin: 0;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
+    text-shadow: none;
+}
+
+.announcement .list {
+    display: grid;
+    grid-template-columns: 100%;
+    grid-gap: 2px;
+}
+
+.announcement .item {
+    padding: 10px;
+    border: 4px solid rgb(209, 209, 209);
+}
+
+.announcement .item:nth-child(odd) { background: #e6e6e6; }
+
+.announcement .critical {
+    animation: glow 1s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+    from {
+        border: 4px solid rgb(209, 209, 209);
+    }
+
+    to {
+        border: 4px solid rgb(255, 89, 39);
+    }
+}
+
+.announcement .list h3 {
+    color: rgb(68, 68, 68);
+    font-size: 1em;
+    font-weight: 600;
+    margin-bottom: 3px;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.announcement .list p {
+    color: rgb(22, 22, 22);
+    font-size: .9em;
+    margin: 0;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.announcement .list a {
+    color: rgb(43, 95, 97);
+    font-size: 1em;
+    margin: 0;
+    text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+
+.announcement .list .dismiss-button {
+	float: right;
+	font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+	background: #cecece;
+	border: none;
+    width: auto;
+    overflow: visible;
+    font-size: .8em;
+    color: rgb(26, 25, 25);
+    padding: 6px 6px;
+    border-radius: 4px;
+    -webkit-border-radius: 4px;
+    -moz-border-radius: 4px;
+}
+
+

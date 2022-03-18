@@ -346,14 +346,37 @@ function refresh_announcements(entries) {
     $("#announcement_list").empty()
     let show_now = false;
     for (const entr of entries) {
-        if (entr.priority == "high")
+        if (entr.dismissed)
+            continue;
+        let iclass = "item";
+        if (entr.priority == "high") {
             // TODO: highlight
             show_now = true;
-        let eid = entr.entry_id.replace("/", "-")
-        let start = '<div id="announcement-' + eid + '">';
-        let title = "<div>" + entr.title + "</div>";
-        let desc = "<div>" + entr.description + "</div>";
-        $("#announcement_list").append(start + title + desc + "</div>");
+            iclass = "item critical";
+        }
+        let eid = entr.entry_id.replaceAll("/", "-")
+        let start = '<div id="announcement-' + eid + '" class=\"' + iclass + '\">';
+        let title = "<h3>" + entr.title + "</h3><br/>";
+        let desc = "<p>" + entr.description + "</p><br/>";
+        let footer = "<div><a href=\"" + entr.url + "\">View Announcement</a>"
+            + "<button id=\"btn-" + eid + "\" class=\"dismiss-button\" type=\"button\">"
+            + "Dismiss</button></div>"
+        $("#announcement_list").append(start + title + desc + footer + "</div>");
+
+        $("#btn-" + eid).click(function () {
+            let name = $(this).attr("id").slice(4).replaceAll("-", "/");
+            console.log(`Button Pressed: ${name}`);
+            if (api_type == "http") {
+                form_post_request(api.dismiss_announcement.url, `?entry_id=${name}`,
+                    (resp) => {
+                        let eid = resp.result.entry_id.replaceAll("/", "-")
+                        $("#announcement-" + eid).remove()
+                        return false;
+                    });
+            } else {
+                dismiss_announcement(name);
+            }
+        });
     }
     if (show_now)
         $("#do_announce").click();
@@ -790,11 +813,12 @@ function update_announcements() {
 }
 
 function dismiss_announcement(entry_id) {
-    args = {"entry_id": entry_id}
+    let args = {"entry_id": entry_id}
     json_rpc.call_method_with_kwargs(api.dismiss_announcement.method, args)
     .then((result) => {
         console.log(result);
-        // TODO: Remove entry from announcment list
+        let eid = result.entry_id.replaceAll("/", "-")
+        $("#announcement-" + eid).remove()
     })
     .catch((error) => {
         update_error(api.dismiss_announcement.method, error);
@@ -930,6 +954,17 @@ function handle_proc_stat_update(proc_stats) {
     return;
 }
 json_rpc.register_method("notify_proc_stat_update", handle_proc_stat_update);
+
+function handle_announcement_update(param) {
+    refresh_announcements(param.entries);
+}
+json_rpc.register_method("notify_announcement_update", handle_announcement_update);
+
+function handle_announcement_dismissed(entry) {
+    let eid = entry.entry_id.replaceAll("/", "-")
+    $("#announcement-" + eid).remove()
+}
+json_rpc.register_method("notify_announcement_dismissed", handle_announcement_dismissed);
 
 //***********End Klipper Event Handlers (JSON-RPC)*****************/
 
@@ -2241,7 +2276,6 @@ window.onload = () => {
         overlay : 0.4,
         closeButton: "#announcement_close"
     });
-
 
     $("#announcement_close").click(() => {
         //$("#login_username").val("");
