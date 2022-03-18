@@ -54,14 +54,13 @@
 <br/>
 Progress: <progress id="progressbar" value="0" max="100"></progress>
 <span id="upload_progress">0%</span><br/><br/>
+<button id="btnsetinstance" style="width: 9em">Set Instance</button>
 <button id="btnqueryendstops" style="width: 9em">Query Endstops</button>
 <button id="btnsubscribe" style="width: 9em">Post Subscription</button>
 <button id="btngetfiles" style="width: 9em">Get File List</button>
 <button id="btngethelp" style="width: 9em">Get Gcode Help</button>
 <button id="btngetobjs" style="width: 9em">Get Object List</button>
 <button id="btntestmesh" style="width: 9em">Get Bed Mesh</button>
-<button id="btnsendbatch" class="reqws" style="width: 9em">Test GC Batch</button>
-<button id="btnsendmacro" class="reqws" style="width: 9em">Test GC Macro</button>
 <br/><br/>
 <button id="btnestop" style="width: 9em">E-Stop</button>
 <button id="btnrestart" style="width: 9em">Restart</button>
@@ -78,7 +77,9 @@ Progress: <progress id="progressbar" value="0" max="100"></progress>
 <button id="btndeluser" style="width: 9em" class="req-login">Delete User</button>
 <button id="btnchangepass" style="width: 9em" class="req-login">Change Pass</button>
 <button id="btnannouncements" style="width: 9em">Announcements</button>
-
+<br/><br/>
+<button id="btnsendbatch" class="reqws" style="width: 9em">Test GC Batch</button>
+<button id="btnsendmacro" class="reqws" style="width: 9em">Test GC Macro</button>
 <br/><br/>
 <span id="filename" hidden></span></br>
 <div id="streamdiv">
@@ -178,6 +179,26 @@ Progress: <progress id="progressbar" value="0" max="100"></progress>
             </div>
             <div class="button-field">
                 <button type="submit" class="user-button">Submit</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<a id="do_setinstance" rel="leanModal" name="setinstance" href="#setinstance" hidden></a>
+<div id="setinstance" class="user">
+    <div id="setinstance-ct">
+        <div id="setinstance-header" class="user-header">
+            <h2>Set Instance</h2>
+            <button id="setinstance_close" class="modal_close"></button>
+        </div>
+        <form id="setinstance_form" class="user-form">
+            <div class="text-field">
+                <label for="setinstance_url">URL: </label>
+                <input id="setinstance_url" name="setinstance_url" type="text" />
+            </div>
+            <div class="button-field">
+                <button type="submit" class="user-button">Submit</button>
+                <button type="button" class="user-button" id="btnresetinstanceurl">Reset</button>
             </div>
         </form>
     </div>

@@ -6,9 +6,13 @@
 
 import JsonRPC from "./json-rpc.js?v=0.1.2";
 
-var origin = location.origin;
-var ws_url = (window.location.protocol == "https:" ? "wss://" : "ws://")
-    + location.host;
+var origin = window.localStorage.getItem('saved_origin');
+if (origin == null)
+    origin = location.origin;
+var ws_url = window.localStorage.getItem('saved_wsurl');
+if (ws_url == null)
+    ws_url = (window.location.protocol == "https:" ? "wss://" : "ws://")
+        + location.host;
 
 // API Definitions
 var api = {
@@ -1574,6 +1578,8 @@ function check_authorization() {
     else if (apikey != null)
         settings.headers = {"X-Api-Key": apikey};
     $.get(settings, (data, status) => {
+        window.localStorage.setItem('saved_origin', origin);
+        window.localStorage.setItem('saved_wsurl', ws_url);
         // Create a websocket if /printer/info successfully returns
         create_websocket();
     })
@@ -2184,7 +2190,47 @@ window.onload = () => {
         return false;
     });
 
-    // Announcment setup
+    // Set Instance Button
+
+    $('#btnsetinstance').click(() => {
+        $("#setinstance_url").val(origin)
+        $("#do_setinstance").click();
+    });
+
+    $('#btnresetinstanceurl').click(() => {
+        $("#setinstance_url").val(location.origin)
+    });
+
+    $("#do_setinstance").leanModal({
+        top : 200,
+        overlay : 0.4,
+        closeButton: "#setinstance_close"
+    });
+
+
+    $("#setinstance_close").click(() => {
+        $("#nav_home").click();
+    });
+
+    $("#setinstance_form").submit((evt)=> {
+        let url = $("#setinstance_url").val()
+        origin = url;
+        if (url.startsWith("https://")) {
+            ws_url = "wss://" + url.slice(8);
+        } else if (url.startsWith("http://")) {
+            ws_url = "ws://" + url.slice(7);
+        } else {
+            origin = "http://" + url
+            ws_url = "ws://" + url
+        }
+        if (websocket != null)
+            websocket.close()
+        check_authorization();
+        $("#setinstance_close").click();
+        return false;
+    });
+
+    // Announcement setup
 
     $('#btnannouncements').click(() => {
         $("#do_announce").click();

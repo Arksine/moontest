@@ -113,6 +113,7 @@
     -webkit-border-radius: 4px;
     -moz-border-radius: 4px;
     text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+    margin-left: 1em;
 }
 
 .modal_close {
