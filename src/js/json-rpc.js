@@ -206,33 +206,34 @@ export default class JsonRPC {
         let response = null;
         let ret = null;
         if (method == null) {
-            console.log("Invalid Method: " + request.method);
-            return;
+            response = this._build_error("Method not found", -32601, request);
         }
-        try {
-            if ("params" in request) {
-                let args = request.params;
-                if (args instanceof Array)
-                    ret = method(...args);
-                else if (args instanceof Object) {
-                    ret = method(args);
+        else {
+            try {
+                if ("params" in request) {
+                    let args = request.params;
+                    if (args instanceof Array)
+                        ret = method(...args);
+                    else if (args instanceof Object) {
+                        ret = method(args);
+                    } else {
+                        response = this._build_error(
+                            "Invalid Parameters", -32602, request
+                        );
+                    }
                 } else {
-                    response = this._build_error(
-                        "Invalid Parameters", -32602, request
-                    );
+                    ret = method();
                 }
-            } else {
-                ret = method();
+                if ("id" in request && response == null) {
+                    // TODO: send response
+                    response =  {jsonrpc: "2.0", result: ret, id: request.id};
+                }
+            } catch (error) {
+                let msg = "Server Error"
+                if ("message" in error && error.message != "")
+                    msg = error.message;
+                response = this._build_error(msg, -31000, request);
             }
-            if ("id" in request && response == null) {
-                // TODO: send response
-                response =  {jsonrpc: "2.0", result: ret, id: request.id};
-            }
-        } catch (error) {
-            let msg = "Server Error"
-            if ("message" in error && error.message != "")
-                msg = error.message;
-            response = this._build_error(msg, -31000, request);
         }
         if (response != null && this.transport != null) {
             this.transport.send(JSON.stringify(response));
