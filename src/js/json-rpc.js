@@ -1,4 +1,20 @@
-// Base JSON-RPC Client implementation
+// JSON-RPC Client implementation
+//
+// NOTE:  JSON-RPC isn't designed for bi-directional calls, however Moonraker
+// uses JSON-RPC to send events to clients.  As such, this implementation also
+// includes a "mostly complete" JSON-RPC server.  The JSON-RPC spec defines errors
+// that should be returned for invalid rpc objects.  This implementation does not
+// send such errors back to Moonraker as it not possible to determine if the
+// error was the result of an invalid request or an invalid response. Generally
+// this doesn't matter as "notifications" do not expect a response.
+//
+// The exception to this is for "agent" client types.  Agents may expose their
+// own JSON-RPC methods that Moonraker will call and expect a response for.
+// Should the agent receive an invalid object (JSON parsing error, missing
+// required field, etc) it is recommended that the agent log the error so further
+// debugging can be done.  The agent MUST however return errors such as method not
+// found, invalid parameters, or an error executing the requested method.
+
 export default class JsonRPC {
     constructor() {
        this.id_counter = 0;
@@ -27,6 +43,23 @@ export default class JsonRPC {
             request.params = args;
         }
         return request;
+    }
+
+    _build_error(message, code, request) {
+        let error = {
+            jsonrpc: "2.0",
+            error: {
+                message: message,
+                code: code
+            },
+            id: null
+        };
+        if ("id" in request) {
+            error.id = request.id;
+        }
+        console.log(`JSON-RPC Request Error: ${code} ${message}`);
+        console.log(request);
+        return error;
     }
 
     register_method(method_name, method) {
@@ -169,32 +202,40 @@ export default class JsonRPC {
     }
 
     _handle_request(request) {
-        // Note:  This implementation does not fully conform
-        // to the JSON-RPC protocol.  The server only sends
-        // events (notifications) to the client, and it is
-        // not concerned with client-side errors.  Thus
-        // this implementation does not attempt to track
-        // request id's, nor does it send responses back
-        // to the server
         let method = this.methods[request.method];
+        let response = null;
+        let ret = null;
         if (method == null) {
             console.log("Invalid Method: " + request.method);
             return;
         }
-        if ("params" in request) {
-            let args = request.params;
-            if (args instanceof Array)
-                method(...args);
-            else if (args instanceof Object) {
-                // server passed keyword arguments which we currently do not support
-                console.log("Keyword Parameters Not Supported:");
-                console.log(request);
+        try {
+            if ("params" in request) {
+                let args = request.params;
+                if (args instanceof Array)
+                    ret = method(...args);
+                else if (args instanceof Object) {
+                    ret = method(args);
+                } else {
+                    response = this._build_error(
+                        "Invalid Parameters", -32602, request
+                    );
+                }
             } else {
-                console.log("Invalid Parameters");
-                console.log(request);
+                ret = method();
             }
-        } else {
-            method();
+            if ("id" in request && response == null) {
+                // TODO: send response
+                response =  {jsonrpc: "2.0", result: ret, id: request.id};
+            }
+        } catch (error) {
+            let msg = "Server Error"
+            if ("message" in error && error.message != "")
+                msg = error.message;
+            response = this._build_error(msg, -31000, request);
+        }
+        if (response != null && this.transport != null) {
+            this.transport.send(JSON.stringify(response));
         }
     }
 
