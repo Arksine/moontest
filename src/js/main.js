@@ -14,6 +14,16 @@ if (ws_url == null)
     ws_url = (window.location.protocol == "https:" ? "wss://" : "ws://")
         + location.host;
 
+var identity = {
+    name: "moontest",
+    version: "0.0.1",
+    type: "web"
+}
+let str_id = window.localStorage.getItem("identity")
+if ( str_id != null) {
+    identity = JSON.parse(str_id);
+}
+
 // API Definitions
 var api = {
     printer_info: {
@@ -487,9 +497,9 @@ function get_websocket_id() {
 
 function connection_identify() {
     let args = {
-        client_name: "moontest",
-        version: "0.0.1",
-        type: "web",
+        client_name: identity.name,
+        version: identity.version,
+        type: identity.type,
         url: "https://github.com/arksine/moontest"
     };
     json_rpc.call_method_with_kwargs("server.connection.identify", args)
@@ -2262,6 +2272,35 @@ window.onload = () => {
             websocket.close()
         check_authorization();
         $("#setinstance_close").click();
+        return false;
+    });
+
+    $("#do_setidentity").leanModal({
+        top : 200,
+        overlay : 0.4,
+        closeButton: "#setidentity_close"
+    });
+
+    $('#btnsetidentity').click(() => {
+        $("#setidentity_name").val(identity.name);
+        $("#setidentity_version").val(identity.version);
+        $("#setidentity_type").val(identity.type)
+        $("#do_setidentity").click();
+    });
+
+    $("#setidentity_close").click(() => {
+        $("#nav_home").click();
+    });
+
+    $("#setidentity_form").submit((evt)=> {
+        identity.name = $("#setidentity_name").val();
+        identity.version = $("#setidentity_version").val();
+        identity.type = $("#setidentity_type").val();
+        window.localStorage.setItem("identity", JSON.stringify(identity))
+        if (websocket != null)
+            websocket.close()
+        check_authorization();
+        $("#setidentity_close").click();
         return false;
     });
 

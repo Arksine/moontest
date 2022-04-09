@@ -56,12 +56,12 @@
 Progress: <progress id="progressbar" value="0" max="100"></progress>
 <span id="upload_progress">0%</span><br/><br/>
 <button id="btnsetinstance" style="width: 9em">Set Instance</button>
+<button id="btnsetidentity" style="width: 9em">Set Identity</button>
 <button id="btnqueryendstops" style="width: 9em">Query Endstops</button>
 <button id="btnsubscribe" style="width: 9em">Post Subscription</button>
 <button id="btngetfiles" style="width: 9em">Get File List</button>
 <button id="btngethelp" style="width: 9em">Get Gcode Help</button>
 <button id="btngetobjs" style="width: 9em">Get Object List</button>
-<button id="btntestmesh" style="width: 9em">Get Bed Mesh</button>
 <br/><br/>
 <button id="btnestop" style="width: 9em">E-Stop</button>
 <button id="btnrestart" style="width: 9em">Restart</button>
@@ -79,8 +79,10 @@ Progress: <progress id="progressbar" value="0" max="100"></progress>
 <button id="btnchangepass" style="width: 9em" class="req-login">Change Pass</button>
 <button id="btnannouncements" style="width: 9em">Announcements</button>
 <br/><br/>
+<button id="btntestmesh" style="width: 9em">Get Bed Mesh</button>
 <button id="btnsendbatch" class="reqws" style="width: 9em">Test GC Batch</button>
 <button id="btnsendmacro" class="reqws" style="width: 9em">Test GC Macro</button>
+
 <br/><br/>
 <span id="filename" hidden></span></br>
 <div id="streamdiv">
@@ -213,6 +215,33 @@ Progress: <progress id="progressbar" value="0" max="100"></progress>
             <button id="announcement_close" class="modal_close"></button>
         </div>
         <div id="announcement_list" class="list"></div>
+    </div>
+</div>
+
+<a id="do_setidentity" rel="leanModal" name="setidentity" href="#setidentity" hidden></a>
+<div id="setidentity" class="user">
+    <div id="setidentity-ct">
+        <div id="setidentity-header" class="user-header">
+            <h2>Set Identity</h2>
+            <button id="setidentity_close" class="modal_close"></button>
+        </div>
+        <form id="setidentity_form" class="user-form">
+            <div class="text-field">
+                <label for="setidentity_name">Name: </label>
+                <input id="setidentity_name" name="setidentity_name" type="text" />
+            </div>
+            <div class="text-field">
+                <label for="setidentity_version">Version: </label>
+                <input id="setidentity_version" name="setidentity_version" type="text" />
+            </div>
+            <div class="text-field">
+                <label for="setidentity_type">Type: </label>
+                <input id="setidentity_type" name="setidentity_type" type="text" />
+            </div>
+            <div class="button-field">
+                <button type="submit" class="user-button">Submit</button>
+            </div>
+        </form>
     </div>
 </div>
 
