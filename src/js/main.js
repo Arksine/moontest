@@ -976,6 +976,11 @@ function handle_announcement_dismissed(entry) {
 }
 json_rpc.register_method("notify_announcement_dismissed", handle_announcement_dismissed);
 
+function handle_agent_test({arg_one, arg_two}) {
+    console.log(`Recieved Test Endpoint: arg_one = ${arg_one}, arg_two = ${arg_two}`);
+    return "Got It";
+}
+json_rpc.register_method("moontest.agent_test", handle_agent_test);
 //***********End Klipper Event Handlers (JSON-RPC)*****************/
 
 //*****************Websocket Batch GCode Tests*********************/
