@@ -1,0 +1,69 @@
+[
+    {
+        "method": "server.info"
+    },
+    {
+        "method": "server.config"
+    },
+    {
+        "method": "printer.info"
+    },
+    {
+        "method": "printer.emergency_stop"
+    },
+    {
+        "method": "printer.restart"
+    },
+    {
+        "method": "printer.firmware_restart"
+    },
+    {
+        "method": "printer.objects.list"
+    },
+    {
+        "method": "printer.objects.query",
+        "params": {
+            "objects" :{
+                "configfile": null
+            }
+        }
+    },
+    {
+        "method": "printer.objects.subscribe",
+        "params": {
+            "objects" :{
+                "toolhead": null,
+                "extruder": ["temperature", "target"],
+                "print_stats": null,
+                "display_status": null
+            }
+        }
+    },
+    {
+        "method": "printer.query_endstops.status"
+    },
+    {
+        "method": "server.temperature_store"
+    },
+    {
+        "method": "server.gcode_store",
+        "params": {
+            "count": 20
+        }
+    },
+    {
+        "method": "printer.gcode.script",
+        "params": {
+            "script": "M118 Hello"
+        }
+    },
+    {
+        "method": "printer.gcode.help"
+    },
+    {
+        "method": "machine.system_info"
+    },
+    {
+        "method": "machine.proc_stats"
+    }
+]
