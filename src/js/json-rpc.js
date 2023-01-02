@@ -206,7 +206,11 @@ export default class JsonRPC {
         let response = null;
         let ret = null;
         if (method == null) {
-            response = this._build_error("Method not found", -32601, request);
+            if (request.method.startsWith("notify_")) {
+                console.log(`Notification Handler Not Implemented: ${request.method}`);
+            } else {
+                response = this._build_error("Method not found", -32601, request);
+            }
         }
         else {
             try {
