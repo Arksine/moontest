@@ -152,25 +152,43 @@ var api = {
 
     // Access APIs
     apikey: {
-        url: "/access/api_key"
+        url: "/access/api_key",
+        method: {
+            get: "access.get_api_key",
+            post: "acess.post_api_key"
+        }
     },
     oneshot_token: {
-        url: "/access/oneshot_token"
+        url: "/access/oneshot_token",
+        method: "access.oneshot_token"
     },
     login: {
-        url: "/access/login"
+        url: "/access/login",
+        method: "acess.login"
     },
     logout: {
-        url: "/access/logout"
+        url: "/access/logout",
+        method: "acess.logout"
     },
     refresh_jwt: {
-        url: "/access/refresh_jwt"
+        url: "/access/refresh_jwt",
+        method: "access.refresh_jwt"
     },
     user: {
-        url: "/access/user"
+        url: "/access/user",
+        method: {
+            get: "access.get_user",
+            post: "access.post_user",
+            delete: "acesss.delete_user"
+        }
     },
     reset_password: {
-        url: "/access/user/password"
+        url: "/access/user/password",
+        method: "access.password"
+    },
+    access_info: {
+        url: "/access/info",
+        method: "access.info"
     },
 
     // Announcements APIs
@@ -415,9 +433,6 @@ function get_server_info() {
     // If the Host is in a "ready" state, we can do some initialization
     json_rpc.call_method(api.server_info.method)
     .then((result) => {
-        if (websocket.id == null)
-            connection_identify();
-
         list_announcements();
 
         if (result.klippy_state != "disconnected")
@@ -502,12 +517,15 @@ function connection_identify() {
         type: identity.type,
         url: "https://github.com/arksine/moontest"
     };
+    if (auth_token != null)
+        args["token"] = auth_token;
     json_rpc.call_method_with_kwargs("server.connection.identify", args)
     .then((result) => {
         // result is an "ok" acknowledgment that the gcode has
         // been successfully processed
         websocket.id = result.connection_id;
         console.log(`Websocket ID Received: ${result.connection_id}`);
+        get_server_info();
     })
     .catch((error) => {
         update_error("server.connection.identify", error);
@@ -1453,12 +1471,9 @@ function create_websocket(url) {
         websocket.close()
     websocket = new KlippyWebsocket(ws_url);
     websocket.onopen = () => {
-        // Depending on the state of Klippy, all endpoints may not be
-        // available when the websocket is first opened.  The "get_server_info"
-        // method is available, and should be used to determine if Klipper is
-        // in the "ready" state.  When Klipper is "ready", all endpoints should
-        // be registered and available.
-        get_server_info();
+        // Identify our front end with Moonraker.  After successfull identification
+        // we can initialize state
+        connection_identify();
 
     };
     json_rpc.register_transport(websocket);
