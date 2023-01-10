@@ -212,7 +212,7 @@ var auth_token = null;
 var refresh_token = window.localStorage.getItem('refresh_token');
 var paused = false;
 var klippy_ready = false;
-var api_type = 'http';
+var api_type = "http";
 var is_printing = false;
 var json_rpc = new JsonRPC();
 
@@ -1659,8 +1659,17 @@ window.onload = () => {
     // Handle changes between the HTTP and Websocket API
     $('.reqws').prop('disabled', true);
     $('.req-login').prop('disabled', true);
+    let type = window.localStorage.getItem("api_type");
+    if (type == "websocket") {
+        api_type = websocket;
+        $('input[type=radio][name=test_type][value=websocket]').prop("checked", true);
+        $('.reqws').prop('disabled', false);
+        $('#apimethod').prop('hidden', true);
+        $('#apiargs').prop('hidden', false);
+    }
     $('input[type=radio][name=test_type]').on('change', function() {
         api_type = $(this).val();
+        window.localStorage.setItem('api_type', api_type);
         $('.reqws').prop('disabled', (api_type == 'http'));
         $('#apimethod').prop('hidden', (api_type == "websocket"));
         $('#apiargs').prop('hidden', (api_type == "http"));
