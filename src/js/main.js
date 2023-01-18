@@ -155,7 +155,7 @@ var api = {
         url: "/access/api_key",
         method: {
             get: "access.get_api_key",
-            post: "acess.post_api_key"
+            post: "access.post_api_key"
         }
     },
     oneshot_token: {
@@ -164,11 +164,11 @@ var api = {
     },
     login: {
         url: "/access/login",
-        method: "acess.login"
+        method: "access.login"
     },
     logout: {
         url: "/access/logout",
-        method: "acess.logout"
+        method: "access.logout"
     },
     refresh_jwt: {
         url: "/access/refresh_jwt",
@@ -179,12 +179,12 @@ var api = {
         method: {
             get: "access.get_user",
             post: "access.post_user",
-            delete: "acesss.delete_user"
+            delete: "access.delete_user"
         }
     },
     reset_password: {
         url: "/access/user/password",
-        method: "access.password"
+        method: "access.user.password"
     },
     access_info: {
         url: "/access/info",
@@ -208,19 +208,77 @@ var api = {
 
 var websocket = null;
 var apikey = null;
-var auth_token = null;
-var refresh_token = window.localStorage.getItem('refresh_token');
 var paused = false;
 var klippy_ready = false;
-var api_type = "http";
+var api_type = window.localStorage.getItem("api_type");
+if (api_type == null)
+    api_type = "http";
 var is_printing = false;
 var json_rpc = new JsonRPC();
+var token_data = {
+    access_token: null,
+    access_token_exp: 0,
+    refresh_token: null,
+    refresh_token_exp: 0
+};
+initialize_tokens();
 
-function round_float (value) {
+function round_float(value) {
     if (typeof value == "number" && !Number.isInteger(value)) {
         return value.toFixed(2);
     }
     return value;
+}
+
+function decode_jwt(token) {
+    let parts = token.split(".");
+    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    let padding = payload.length % 4;
+    if (padding) {
+        for (let i = 0; i < 4 - padding; i++) {
+            payload += "=";
+        }
+    }
+    let decoded = JSON.parse(atob(payload));
+    console.log("Decoded Token Payload:");
+    console.log(decoded);
+    let curtime = Math.floor(Date.now() / 1000);
+    // Calculate time drift between the host and the client machines.
+    let drift = curtime - decoded.iat;
+    if (Math.abs(drift) > 5) {
+        console.log(`JWT Drift Detected: ${drift} seconds`)
+        return decoded.exp + drift;
+    }
+    return decoded.exp;
+}
+
+function initialize_tokens() {
+    let tokens = window.localStorage.getItem("jwt_token_info");
+    if (tokens == null) {
+        console.log("No Web Tokens Saved")
+        return;
+    }
+    token_data = JSON.parse(tokens);
+    let cur_time = Math.floor(Date.now() / 1000);
+    if (token_data.refresh_token_exp - cur_time < 60) {
+        // Token has less than 60 seconds remaining, remove tokens assuming a logout
+        token_data.access_token = null;
+        token_data.access_token_exp = 0;
+        token_data.refresh_token = null;
+        token_data.refresh_token_exp = 0;
+    }
+    window.localStorage.setItem("jwt_token_info", JSON.stringify(token_data));
+    console.log("Web Tokens Initialized")
+    console.log(token_data);
+}
+
+function need_jwt_refresh(token_name) {
+    let token = token_data[token_name];
+    if (token == null)
+        return false;
+    let exp_time = token_data[`${token_name}_exp`];
+    let cur_time = Math.floor(Date.now() / 1000);
+    return (exp_time - cur_time < 10);
 }
 
 //****************UI Update Functions****************/
@@ -510,15 +568,22 @@ function get_websocket_id() {
     });
 }
 
-function connection_identify() {
+function connection_identify(check_jwt=true) {
+    if (websocket == null || websocket.id != null)
+        return;
     let args = {
         client_name: identity.name,
         version: identity.version,
         type: identity.type,
         url: "https://github.com/arksine/moontest"
     };
-    if (auth_token != null)
-        args["token"] = auth_token;
+    if (api_type == "websocket" && token_data.access_token != null) {
+        if (check_jwt && need_jwt_refresh("access_token")) {
+            refresh_json_web_token(connection_identify, false);
+            return;
+        }
+        args["access_token"] = token_data.access_token;
+    }
     json_rpc.call_method_with_kwargs("server.connection.identify", args)
     .then((result) => {
         // result is an "ok" acknowledgment that the gcode has
@@ -529,6 +594,11 @@ function connection_identify() {
     })
     .catch((error) => {
         update_error("server.connection.identify", error);
+        if (error.code == -32602) {
+            // Authorization Error
+            $('.req-login').prop('disabled', true);
+            $("#do_login").click();
+        }
     });
 }
 
@@ -1085,18 +1155,24 @@ function encode_filename(path) {
     return fname;
 }
 
-function run_request(url, method, callback=null)
+function run_request(url, method, callback=null, check_jwt=true)
 {
+    if (check_jwt && need_jwt_refresh("access_token")) {
+        refresh_json_web_token(run_request, url, method, callback, false);
+        return;
+    }
     let settings = {
         url: url,
         method: method,
         statusCode: {
             401: function() {
-                if (refresh_token != null) {
-                    refresh_json_web_token(run_request, url, method, callback);
+                if (token_data.refresh_token != null) {
+                    // try the refresh again
+                    refresh_json_web_token(run_request, url, method, callback, false);
                 }
                 else {
-                    auth_token = null;
+                    token_data.access_token = null;
+                    window.localStorage.setItem("jwt_token_info", JSON.stringify(token_data));
                     $("#do_login").click();
                 }
             }
@@ -1114,8 +1190,8 @@ function run_request(url, method, callback=null)
         settings.contentType = false,
         settings.processData = false
     }
-    if (auth_token != null)
-        settings.headers = {"Authorization": `Bearer ${auth_token}`};
+    if (token_data.access_token != null)
+        settings.headers = {"Authorization": `Bearer ${token_data.access_token}`};
     else if (apikey != null)
         settings.headers = {"X-Api-Key": apikey};
     $.ajax(settings);
@@ -1138,7 +1214,7 @@ function form_delete_request(api_url, query_string="", callback=null) {
 
 function form_download_request(uri) {
     let dl_url = origin + uri;
-    if (apikey != null || auth_token != null) {
+    if (apikey != null || token_data.access_token != null) {
         form_get_request(api.oneshot_token.url, "",
             (resp) => {
                 let token = resp.result;
@@ -1205,8 +1281,8 @@ function jstree_populate_children(node, callback) {
     if (api_type == "http") {
         let qs = `?path=${node.id}`;
         let settings = {url: origin + api.directory.url + qs};
-        if (auth_token != null)
-            settings.headers = {"Authorization": `Bearer ${auth_token}`};
+        if (token_data.access_token != null)
+            settings.headers = {"Authorization": `Bearer ${token_data.access_token}`};
         else if (apikey != null)
             settings.headers = {"X-Api-Key": apikey};
         $.get(settings, (resp, status) => {
@@ -1374,7 +1450,6 @@ class KlippyWebsocket {
         this.connected = false;
         this.ws = null;
         this.onmessage = null;
-        this.onopen = null;
         this.id = null;
         this.reconnect = true
         this.connect();
@@ -1385,13 +1460,13 @@ class KlippyWebsocket {
         // to reconnect if its closed. This is nice as it allows the
         // client to easily recover from Klippy restarts without user
         // intervention
-        if (apikey != null || auth_token != null) {
+        if (api_type == "http" && (apikey != null || token_data.access_token != null)) {
             // Fetch a oneshot token to pass websocket authorization
             let token_settings = {
                 url: origin + api.oneshot_token.url,
             }
-            if (auth_token != null)
-                token_settings.headers = {"Authorization": `Bearer ${auth_token}`};
+            if (token_data.access_token != null)
+                token_settings.headers = {"Authorization": `Bearer ${token_data.access_token}`};
             else
                 token_settings.headers = {"X-Api-Key": apikey};
             $.get(token_settings, (data, status) => {
@@ -1418,8 +1493,7 @@ class KlippyWebsocket {
         this.ws.onopen = () => {
             this.connected = true;
             console.log("Websocket connected");
-            if (this.onopen != null)
-                this.onopen();
+            connection_identify();
         };
 
         this.ws.onclose = (e) => {
@@ -1470,12 +1544,6 @@ function create_websocket(url) {
     if (websocket != null)
         websocket.close()
     websocket = new KlippyWebsocket(ws_url);
-    websocket.onopen = () => {
-        // Identify our front end with Moonraker.  After successfull identification
-        // we can initialize state
-        connection_identify();
-
-    };
     json_rpc.register_transport(websocket);
 }
 
@@ -1487,60 +1555,104 @@ function login_jwt_user(user, pass, do_create) {
     let close_btn_name = "#login_close"
     if (do_create)
         close_btn_name = "#signup_close"
-    let settings = {
-        url: origin + api.login.url,
-        data: JSON.stringify({username: user, password: pass}),
-        contentType: "application/json",
-        dataType: 'json'
+    if (api_type == "http") {
+        let settings = {
+            url: origin + api.login.url,
+            data: JSON.stringify({username: user, password: pass}),
+            contentType: "application/json",
+            dataType: 'json'
+        }
+        if (do_create) {
+            settings.url = origin + api.user.url;
+            if (token_data.access_token != null)
+                    settings.headers = {"Authorization": `Bearer ${token_data.access_token}`};
+            else if (apikey != null)
+                settings.headers = {"X-Api-Key": apikey};
+        }
+        $.post(settings, (resp, status) => {
+            let res = resp.result;
+            console.log("Login Response:");
+            console.log(res);
+            token_data.access_token = res.token;
+            token_data.refresh_token = res.refresh_token;
+            token_data.access_token_exp = decode_jwt(res.token);
+            token_data.refresh_token_exp = decode_jwt(res.refresh_token);
+            window.localStorage.setItem("jwt_token_info", JSON.stringify(token_data));
+            $('.req-login').prop('disabled', false);
+            $(close_btn_name).click();
+            moonraker_connect();
+        }).fail(() => {
+            console.log("Login Failed");
+            alert("Login Failed")
+        });
+    } else {
+        let params = {username: user, password: pass};
+        let method = api.login.method;
+        if (do_create)
+            method = api.user.method.post;
+        json_rpc.call_method_with_kwargs(method, params)
+        .then((result) => {
+            console.log("Login Response:");
+            console.log(result);
+            token_data.access_token = result.token;
+            token_data.refresh_token = result.refresh_token;
+            token_data.access_token_exp = decode_jwt(result.token);
+            token_data.refresh_token_exp = decode_jwt(result.refresh_token);
+            window.localStorage.setItem("jwt_token_info", JSON.stringify(token_data));
+            $('.req-login').prop('disabled', false);
+            $(close_btn_name).click();
+            if (websocket.id == null)
+                connection_identify();
+        })
+        .catch((error) => {
+            update_error(method, error);
+            console.log("Login Failed");
+            alert("Login Failed")
+        });
     }
-    if (do_create) {
-        settings.url = origin + api.user.url;
-        if (auth_token != null)
-                settings.headers = {"Authorization": `Bearer ${auth_token}`};
-        else if (apikey != null)
-            settings.headers = {"X-Api-Key": apikey};
-    }
-    $.post(settings, (resp, status) => {
-        let res = resp.result;
-        console.log("Login Response:");
-        console.log(res);
-        auth_token = res.token;
-        refresh_token = res.refresh_token;
-        window.localStorage.setItem('refresh_token', refresh_token);
-        $('.req-login').prop('disabled', false);
-        $(close_btn_name).click();
-        check_authorization();
-    }).fail(() => {
-        console.log("Login Failed");
-        alert("Login Failed")
-    });
 }
 
 function logout_jwt_user() {
-    if (auth_token == null) {
+    if (token_data.access_token == null) {
         console.log("No User Logged In")
         return;
     }
-    let settings = {
-        url: origin + api.logout.url,
-        contentType: "application/json",
-        dataType: 'json',
-        headers: {
-            "Authorization": `Bearer ${auth_token}`
+    if (api_type == "http") {
+        let settings = {
+            url: origin + api.logout.url,
+            contentType: "application/json",
+            dataType: 'json',
+            headers: {
+                "Authorization": `Bearer ${token_data.access_token}`
+            }
         }
-    }
 
-    $.post(settings, (resp, status) => {
-        let res = resp.result;
-        console.log("Logout Response:");
-        console.log(res);
-        auth_token = null;
-        refresh_token = null;
-        window.localStorage.removeItem('refresh_token');
-        $('.req-login').prop('disabled', true);
-    }).fail(() => {
-        console.log("Logout User Failed");
-    });
+        $.post(settings, (resp, status) => {
+            let res = resp.result;
+            console.log("Logout Response:");
+            console.log(res);
+            token_data.access_token = null;
+            token_data.refresh_token = null;
+            window.localStorage.setItem("jwt_token_info", JSON.stringify(token_data));
+            $('.req-login').prop('disabled', true);
+        }).fail(() => {
+            console.log("Logout User Failed");
+        });
+    } else {
+        json_rpc.call_method(api.logout.method)
+        .then((result) => {
+            console.log("Logout Response:");
+            console.log(result);
+            token_data.access_token = null;
+            token_data.refresh_token = null;
+            window.localStorage.setItem("jwt_token_info", JSON.stringify(token_data));
+            $('.req-login').prop('disabled', true);
+        })
+        .catch((error) => {
+            update_error(api.logout.method, error);
+            console.log("Logout User Failed");
+        });
+    }
 }
 
 function delete_jwt_user(user) {
@@ -1549,29 +1661,44 @@ function delete_jwt_user(user) {
         return;
     }
 
-    let settings = {
-        method: 'DELETE',
-        url: origin + api.user.url,
-        contentType: "application/json",
-        data: JSON.stringify({username: user}),
-        dataType: 'json',
-        headers: {
-            "Authorization": `Bearer ${auth_token}`
-        },
-        success: (resp, status) => {
-            let res = resp.result;
-            console.log("Delete User Response:");
-            console.log(res);
-            $("#deleteuser_close").click()
+    if (api_type == "http") {
+        let settings = {
+            method: 'DELETE',
+            url: origin + api.user.url,
+            contentType: "application/json",
+            data: JSON.stringify({username: user}),
+            dataType: 'json',
+            headers: {
+                "Authorization": `Bearer ${token_data.access_token}`
+            },
+            success: (resp, status) => {
+                let res = resp.result;
+                console.log("Delete User Response:");
+                console.log(res);
+                $("#deleteuser_close").click();
+            }
         }
-    }
 
-    $.ajax(settings)
-    .fail(() => {
-        console.log("Delete User Failed");
-        $("#deleteuser_close").click()
-        window.alert("Unable to delete user!")
-    });
+        $.ajax(settings)
+        .fail(() => {
+            console.log("Delete User Failed");
+            $("#deleteuser_close").click();
+            window.alert("Unable to delete user!");
+        });
+    } else {
+        json_rpc.call_method_with_kwargs(api.user.method.delete, {username: user})
+        .then((result) => {
+            console.log("Delete User Response:");
+            console.log(result);
+            $("#deleteuser_close").click();
+        })
+        .catch((error) => {
+            update_error(api.user.method.delete, error);
+            console.log("Delete User Failed");
+            $("#deleteuser_close").click();
+            window.alert("Unable to delete user!");
+        });
+    }
 }
 
 function change_jwt_password(old_pass, new_pass) {
@@ -1579,75 +1706,128 @@ function change_jwt_password(old_pass, new_pass) {
         alert("Invalid input for change password")
         return;
     }
-    let settings = {
-        url: origin + api.reset_password.url,
-        data: JSON.stringify({password: old_pass, new_password: new_pass}),
-        contentType: "application/json",
-        dataType: 'json',
-        headers: {
-            "Authorization": `Bearer ${auth_token}`
+    if (api_type == "http") {
+        let settings = {
+            url: origin + api.reset_password.url,
+            data: JSON.stringify({password: old_pass, new_password: new_pass}),
+            contentType: "application/json",
+            dataType: 'json',
+            headers: {
+                "Authorization": `Bearer ${token_data.access_token}`
+            }
         }
+        $.post(settings, (resp, status) => {
+            let res = resp.result;
+            console.log("Change Password Response:");
+            console.log(res);
+            $("#changepass_close").click();
+        }).fail(() => {
+            console.log("Failed to change password");
+            alert("Password Reset Failed")
+        });
+    } else {
+        let params = {password: old_pass, new_password: new_pass};
+        json_rpc.call_method_with_kwargs(api.reset_password.method, params)
+        .then((result) => {
+            console.log("Change Password Response:");
+            console.log(result);
+            $("#changepass_close").click();
+        })
+        .catch((error) => {
+            update_error(api.reset_password.method, error);
+            console.log("Failed to change password");
+            alert("Password Reset Failed")
+        });
     }
-    $.post(settings, (resp, status) => {
-        let res = resp.result;
-        console.log("Change Password Response:");
-        console.log(res);
-        $("#changepass_close").click();
-    }).fail(() => {
-        console.log("Failed to change password");
-        alert("Password Reset Failed")
-    });
 }
 
 function refresh_json_web_token(callback, ...args) {
-    let settings = {
-        url: origin + api.refresh_jwt.url,
-        data: JSON.stringify({refresh_token: refresh_token}),
-        contentType: "application/json",
-        dataType: 'json',
-    }
-    $.post(settings, (resp, status) => {
-        let res = resp.result;
-        console.log("Refresh JWT Response:");
-        console.log(res);
-        auth_token = res.token;
-        $('.req-login').prop('disabled', false);
-        if (callback != null)
-            callback(...args);
-    }).fail(() => {
-        console.log("Refresh JWT Failed");
-        auth_token = null;
-        refresh_token = null;
-        window.localStorage.removeItem('refresh_token');
+    if (need_jwt_refresh("refresh_token")) {
         $('.req-login').prop('disabled', true);
         $("#do_login").click();
-    });
+        return;
+    }
+    if (api_type == "http") {
+        let settings = {
+            url: origin + api.refresh_jwt.url,
+            data: JSON.stringify({refresh_token: token_data.refresh_token}),
+            contentType: "application/json",
+            dataType: 'json',
+        }
+        $.post(settings, (resp, status) => {
+            let res = resp.result;
+            console.log("Refresh JWT Response:");
+            console.log(res);
+            token_data.access_token = res.token;
+            token_data.access_token_exp = decode_jwt(res.token);
+            window.localStorage.setItem("jwt_token_info", JSON.stringify(token_data));
+            $('.req-login').prop('disabled', false);
+            if (callback != null)
+                callback(...args);
+        }).fail(() => {
+            console.log("Refresh JWT Failed");
+            token_data.access_token = null;
+            token_data.refresh_token = null;
+            window.localStorage.setItem("jwt_token_info", JSON.stringify(token_data));
+            $('.req-login').prop('disabled', true);
+            $("#do_login").click();
+        });
+    } else {
+        let params = {refresh_token: token_data.refresh_token};
+        json_rpc.call_method_with_kwargs(api.refresh_jwt.method, params)
+        .then((result) => {
+            console.log("Refresh JWT Response:");
+            console.log(result);
+            token_data.access_token = result.token;
+            token_data.access_token_exp = decode_jwt(result.token);
+            window.localStorage.setItem("jwt_token_info", JSON.stringify(token_data));
+            $('.req-login').prop('disabled', false);
+            if (callback != null)
+                callback(...args);
+        })
+        .catch((error) => {
+            update_error(api.refresh_jwt.method, error);
+            console.log("Refresh JWT Failed");
+            token_data.access_token = null;
+            token_data.refresh_token = null;
+            window.localStorage.setItem("jwt_token_info", JSON.stringify(token_data));
+            $('.req-login').prop('disabled', true);
+            $("#do_login").click();
+        });
+    }
 }
 
-function check_authorization() {
-    // send a HTTP "run gcode" command
-    let settings = {
-        url: origin + api.server_info.url,
-        statusCode: {
-            401: function() {
-                if (refresh_token != null) {
-                    refresh_json_web_token(check_authorization);
-                } else {
-                    $("#do_login").click();
+function moonraker_connect(check_jwt=true) {
+    if (api_type == "http") {
+        if (check_jwt && need_jwt_refresh("access_token")) {
+            refresh_json_web_token(moonraker_connect, false);
+            return;
+        }
+        let settings = {
+            url: origin + api.server_info.url,
+            statusCode: {
+                401: function() {
+                    if (token_data.refresh_token != null) {
+                        refresh_json_web_token(moonraker_connect, false);
+                    } else {
+                        $("#do_login").click();
+                    }
                 }
             }
         }
-    }
-    if (auth_token != null)
-        settings.headers = {"Authorization": `Bearer ${auth_token}`};
-    else if (apikey != null)
-        settings.headers = {"X-Api-Key": apikey};
-    $.get(settings, (data, status) => {
-        window.localStorage.setItem('saved_origin', origin);
-        window.localStorage.setItem('saved_wsurl', ws_url);
-        // Create a websocket if /printer/info successfully returns
+        if (token_data.access_token != null)
+            settings.headers = {"Authorization": `Bearer ${token_data.access_token}`};
+        else if (apikey != null)
+            settings.headers = {"X-Api-Key": apikey};
+        $.get(settings, (data, status) => {
+            window.localStorage.setItem('saved_origin', origin);
+            window.localStorage.setItem('saved_wsurl', ws_url);
+            // Create a websocket if /printer/info successfully returns
+            create_websocket();
+        })
+    } else {
         create_websocket();
-    })
+    }
 }
 
 function do_download(url) {
@@ -1658,10 +1838,8 @@ function do_download(url) {
 window.onload = () => {
     // Handle changes between the HTTP and Websocket API
     $('.reqws').prop('disabled', true);
-    $('.req-login').prop('disabled', true);
-    let type = window.localStorage.getItem("api_type");
-    if (type == "websocket") {
-        api_type = websocket;
+    $('.req-login').prop('disabled', token_data.access_token == null);
+    if (api_type == "websocket") {
         $('input[type=radio][name=test_type][value=websocket]').prop("checked", true);
         $('.reqws').prop('disabled', false);
         $('#apimethod').prop('hidden', true);
@@ -1871,8 +2049,8 @@ window.onload = () => {
             let sendtype = $("input[type=radio][name=api_cmd_type]:checked").val();
             let url = $('#apirequest').val();
             let settings = {url: url}
-            if (auth_token != null)
-                settings.headers = {"Authorization": `Bearer ${auth_token}`};
+            if (token_data.access_token != null)
+                settings.headers = {"Authorization": `Bearer ${token_data.access_token}`};
             else if (apikey != null)
                 settings.headers = {"X-Api-Key": apikey};
             if (sendtype == "get") {
@@ -1963,8 +2141,8 @@ window.onload = () => {
                     return false;
                 }
             };
-            if (auth_token != null)
-                settings.headers = {"Authorization": `Bearer ${auth_token}`};
+            if (token_data.access_token != null)
+                settings.headers = {"Authorization": `Bearer ${token_data.access_token}`};
             else if (apikey != null)
                 settings.headers = {"X-Api-Key": apikey};
             $.ajax(settings);
@@ -2058,8 +2236,8 @@ window.onload = () => {
     $('#btntestmesh').click(() => {
         if (api_type == 'http') {
             let settings = {url: origin + api.object_status.url + "?bed_mesh"};
-            if (auth_token != null)
-                settings.headers = {"Authorization": `Bearer ${auth_token}`};
+            if (token_data.access_token != null)
+                settings.headers = {"Authorization": `Bearer ${token_data.access_token}`};
             else if (apikey != null)
                 settings.headers = {"X-Api-Key": apikey};
             $.get(settings, (resp, status) => {
@@ -2170,7 +2348,7 @@ window.onload = () => {
             apikey = null;
         else
             apikey = new_key;
-        check_authorization();
+        moonraker_connect();
     });
 
     $("#do_login").leanModal({
@@ -2299,7 +2477,7 @@ window.onload = () => {
         }
         if (websocket != null)
             websocket.close()
-        check_authorization();
+        moonraker_connect();
         $("#setinstance_close").click();
         return false;
     });
@@ -2328,7 +2506,7 @@ window.onload = () => {
         window.localStorage.setItem("identity", JSON.stringify(identity))
         if (websocket != null)
             websocket.close()
-        check_authorization();
+        moonraker_connect();
         $("#setidentity_close").click();
         return false;
     });
@@ -2349,6 +2527,5 @@ window.onload = () => {
         //$("#login_username").val("");
         $("#nav_home").click();
     });
-
-    check_authorization();
+    moonraker_connect();
 };
