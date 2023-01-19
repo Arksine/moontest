@@ -577,12 +577,16 @@ function connection_identify(check_jwt=true) {
         type: identity.type,
         url: "https://github.com/arksine/moontest"
     };
-    if (api_type == "websocket" && token_data.access_token != null) {
-        if (check_jwt && need_jwt_refresh("access_token")) {
-            refresh_json_web_token(connection_identify, false);
-            return;
+    if (api_type == "websocket") {
+        if (token_data.access_token != null) {
+            if (check_jwt && need_jwt_refresh("access_token")) {
+                refresh_json_web_token(connection_identify, false);
+                return;
+            }
+            args["access_token"] = token_data.access_token;
+        } else if (apikey != null) {
+            args["api_key"] = apikey
         }
-        args["access_token"] = token_data.access_token;
     }
     json_rpc.call_method_with_kwargs("server.connection.identify", args)
     .then((result) => {
