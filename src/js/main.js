@@ -1112,7 +1112,7 @@ function send_gcode_batch(gcodes) {
 
             // Use the index to look up the gcode parameter in the original
             // request
-            let orig_gcode = batch[res.index].params[0];
+            let orig_gcode = batch[res.index].params.script;
             console.log("Batch Gcode " + orig_gcode +
             " successfully executed with result: " + res.result);
         }
@@ -1120,7 +1120,7 @@ function send_gcode_batch(gcodes) {
     .catch((err) => {
         // Like the result, the error is an object.  However there
         // is an "error" in place of the "result key"
-        let orig_gcode = batch[err.index].params[0];
+        let orig_gcode = batch[err.index].params.script;
         console.log("Batch Gcode <" + orig_gcode +
         "> failed with error: " + err.error.message);
     });
