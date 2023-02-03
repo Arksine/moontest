@@ -492,10 +492,8 @@ function get_server_info() {
     json_rpc.call_method(api.server_info.method)
     .then((result) => {
         list_announcements();
-
-        if (result.klippy_state != "disconnected")
-            get_klippy_info();
         if (result.klippy_state == "ready") {
+            get_klippy_info();
             if (!klippy_ready) {
                 // Klippy was ready when we connected, print klippy info and
                 // initialize state
