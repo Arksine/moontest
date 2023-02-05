@@ -1185,7 +1185,7 @@ function run_request(url, method, callback=null, check_jwt=true)
                 callback(resp)
             return false;
         }};
-    if (websocket.id != null) {
+    if (websocket != null && websocket.id != null) {
         let fdata = new FormData();
         fdata.append("connection_id", websocket.id);
         settings.data = fdata
@@ -1464,27 +1464,13 @@ class KlippyWebsocket {
         // intervention
         if (api_type == "http" && (apikey != null || token_data.access_token != null)) {
             // Fetch a oneshot token to pass websocket authorization
-            let token_settings = {
-                url: origin + api.oneshot_token.url,
-            }
-            if (token_data.access_token != null)
-                token_settings.headers = {"Authorization": `Bearer ${token_data.access_token}`};
-            else
-                token_settings.headers = {"X-Api-Key": apikey};
-            $.get(token_settings, (data, status) => {
-                let token = data.result;
-                let url = this.base_address + "/websocket?token=" + token;
-                this.ws = new WebSocket(url);
-                this._set_callbacks();
-            }).fail(() => {
-                console.log("Failed to retreive oneshot token");
-                if (this.reconnect) {
-                    setTimeout(() => {
-                        if (this.reconnect)
-                            this.connect();
-                    }, 1000);
-                }
-            })
+            form_get_request(api.oneshot_token.url, "",
+                (resp) => {
+                    let token = resp.result;
+                    let url = this.base_address + "/websocket?token=" + token;
+                    this.ws = new WebSocket(url);
+                    this._set_callbacks();
+                });
         } else {
             this.ws = new WebSocket(this.base_address + "/websocket");
             this._set_callbacks();
