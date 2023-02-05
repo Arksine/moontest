@@ -492,6 +492,8 @@ function get_server_info() {
     json_rpc.call_method(api.server_info.method)
     .then((result) => {
         list_announcements();
+        if (result.klippy_state != "disconnected" && websocket != null)
+                websocket.connect_bridge();
         if (result.klippy_state == "ready") {
             get_klippy_info();
             if (!klippy_ready) {
@@ -518,6 +520,7 @@ function get_server_info() {
                     add_subscription(sub);
                 } else {
                     get_status({idle_timeout: null, pause_resume: null});
+                    websocket.create_bridge_socket()
                 }
             }
         } else {
@@ -1143,6 +1146,18 @@ async function send_gcode_macro(gcodes) {
 
 //**************End Websocket Batch GCode Tests********************/
 
+//*****Klippy Socket Bridge Methods****/
+function send_bridge_request(method, params) {
+    if (websocket == null)
+        return;
+    let id = Math.floor(Math.random() * 100000);
+    let api_request = {method: method, id: id};
+    if (params != null)
+        api_request.params = params;
+    websocket.send_bridge(JSON.stringify(api_request));
+}
+//*****End Klippy Socket Bridge Methods****/
+
 //*****************HTTP Helper Functions***************************/
 
 function encode_filename(path) {
@@ -1451,6 +1466,7 @@ class KlippyWebsocket {
         this.base_address = addr;
         this.connected = false;
         this.ws = null;
+        this.bridge_ws = null;
         this.onmessage = null;
         this.id = null;
         this.reconnect = true
@@ -1467,17 +1483,19 @@ class KlippyWebsocket {
             form_get_request(api.oneshot_token.url, "",
                 (resp) => {
                     let token = resp.result;
-                    let url = this.base_address + "/websocket?token=" + token;
-                    this.ws = new WebSocket(url);
-                    this._set_callbacks();
+                    this._create_primary_socket(token);
                 });
         } else {
-            this.ws = new WebSocket(this.base_address + "/websocket");
-            this._set_callbacks();
+            this._create_primary_socket();
         }
     }
 
-    _set_callbacks() {
+    _create_primary_socket(token) {
+        let url = this.base_address + "/websocket";
+        if (token != null) {
+            url += `?token=${token}`;
+        }
+        this.ws = new WebSocket(url);
         this.ws.onopen = () => {
             this.connected = true;
             console.log("Websocket connected");
@@ -1487,6 +1505,10 @@ class KlippyWebsocket {
         this.ws.onclose = (e) => {
             klippy_ready = false;
             this.connected = false;
+            if (this.bridge_ws != null) {
+                this.bridge_ws.close(1000, "Primary Websocket Closed");
+                this.bridge_ws = null;
+            }
             this.id = null;
             // TODO:  Need to cancel any pending JSON-RPC requests
             if (this.reconnect) {
@@ -1500,7 +1522,8 @@ class KlippyWebsocket {
 
         this.ws.onerror = (err) => {
             klippy_ready = false;
-            console.log("Websocket Error: ", err.message);
+            console.log("Websocket Error: ");
+            console.log(err);
             this.ws.close();
         };
 
@@ -1512,12 +1535,63 @@ class KlippyWebsocket {
         };
     }
 
+    connect_bridge() {
+        if (this.bridge_ws != null)
+            return;
+        if (apikey != null || token_data.access_token != null) {
+            // Fetch a oneshot token to pass websocket authorization
+            form_get_request(api.oneshot_token.url, "",
+                (resp) => {
+                    let token = resp.result;
+                    this._create_bridge_socket(token);
+                });
+        } else {
+            this._create_bridge_socket();
+        }
+    }
+
+    _create_bridge_socket(token) {
+        if (this.bridge_ws != null)
+            return;
+        let url = this.base_address + "/klippysocket";
+        if (token != null) {
+            url += `?token=${token}`;
+        }
+        this.bridge_ws = new WebSocket(url);
+        this.bridge_ws.onopen = () => {
+            console.log("Klippy Bridge Socket connected");
+        };
+        this.bridge_ws.onclose = (e) => {
+            console.log("Klippy Bridge Socket close");
+            this.bridge_ws = null;
+        };
+
+        this.bridge_ws.onerror = (err) => {
+            console.log("Klippy Bridge Error: ");
+            console.log(err)
+            this.bridge_ws.close();
+        };
+        this.bridge_ws.onmessage = (e) => {
+            let jdata = JSON.parse(e.data);
+            if (jdata.id != null) {
+                console.log("Received Klippy Bridge Response");
+                console.log(jdata);
+            }
+        };
+    }
+
     send(data) {
         // Only allow send if connected
         if (this.connected) {
             this.ws.send(data);
         } else {
             console.log("Websocket closed, cannot send data");
+        }
+    }
+
+    send_bridge(data) {
+        if (this.bridge_ws != null) {
+            this.bridge_ws.send(data)
         }
     }
 
@@ -1832,6 +1906,7 @@ window.onload = () => {
         $('.reqws').prop('disabled', false);
         $('#apimethod').prop('hidden', true);
         $('#apiargs').prop('hidden', false);
+        $('#wstype').prop('hidden', false);
     }
     $('input[type=radio][name=test_type]').on('change', function() {
         api_type = $(this).val();
@@ -1839,6 +1914,7 @@ window.onload = () => {
         $('.reqws').prop('disabled', (api_type == 'http'));
         $('#apimethod').prop('hidden', (api_type == "websocket"));
         $('#apiargs').prop('hidden', (api_type == "http"));
+        $('#wstype').prop('hidden', (api_type == "http"));
     });
 
     // Instantiate basic jstree
@@ -2052,30 +2128,45 @@ window.onload = () => {
                 form_delete_request(url);
             }
         } else {
+            let wstype = $("input[type=radio][name=socket_type]:checked").val();
             let method = $('#apirequest').val().trim();
             let args = $('#apiargs').val();
             if (args != "") {
+                let jsonargs = args;
+                let params = null;
+                if (!args.startsWith("{"))
+                    jsonargs = "{" + args + "}";
                 try {
-                    args = JSON.parse("{" + args + "}");
+                    params = JSON.parse(jsonargs);
                 } catch (error) {
-                    console.log("Unable to parse arguments");
-                    return
+                    console.log(`Unable to parse websocket params: ${args}`);
+                    return false;
                 }
-                json_rpc.call_method_with_kwargs(method, args)
-                .then((result) => {
-                    console.log(result);
-                })
-                .catch((error) => {
-                    update_error(method, error);
-                });
+                if (wstype == "primary") {
+                    json_rpc.call_method_with_kwargs(method, params)
+                    .then((result) => {
+                        console.log(result);
+                    })
+                    .catch((error) => {
+                        update_error(method, error);
+                    });
+                } else {
+                    // Send over Klippy Bridge
+                    send_bridge_request(method, params);
+                }
             } else {
-                json_rpc.call_method(method)
-                .then((result) => {
-                    console.log(result);
-                })
-                .catch((error) => {
-                    update_error(method, error);
-                });
+                if (wstype == "primary") {
+                    json_rpc.call_method(method)
+                    .then((result) => {
+                        console.log(result);
+                    })
+                    .catch((error) => {
+                        update_error(method, error);
+                    });
+                } else {
+                    // Send over Klippy Bridge
+                    send_bridge_request(method);
+                }
             }
         }
         return false;
