@@ -299,7 +299,7 @@ class MoonrakerConnection:
                 fut = self._loop.create_future()
                 self._loop.add_writer(self.out_fd, self._req_stdout, fut)
                 await fut
-                ret = sys.stdout.write(message)
+                ret = os.write(self.out_fd, message.encode())
                 message = message[ret:]
             sys.stdout.flush()
 
