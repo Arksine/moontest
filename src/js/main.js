@@ -512,7 +512,7 @@ function get_server_info() {
                             toolhead: null,
                             virtual_sdcard: null,
                             heater_bed: null,
-                            extruder: ["temperature", "target"],
+                            extruder: null,
                             fan: null,
                             print_stats: null,
                             motion_report: null,}
@@ -2275,7 +2275,7 @@ window.onload = () => {
      $('#btnsubscribe').click(() => {
         if (api_type == 'http') {
             let qs = "?gcode_move=gcode_position,speed,speed_factor,extrude_factor" +
-                    "&toolhead&virtual_sdcard&heater_bed&extruder=temperature,target&fan&idle_timeout&pause_resume"  +
+                    "&toolhead&virtual_sdcard&heater_bed&extruder&fan&idle_timeout&pause_resume"  +
                     "&print_stats&motion_report";
             form_post_request(api.object_subscription.url, qs);
         } else {
@@ -2287,7 +2287,7 @@ window.onload = () => {
                     toolhead: null,
                     virtual_sdcard: null,
                     heater_bed: null,
-                    extruder: ["temperature", "target"],
+                    extruder: null,
                     fan: null,
                     print_stats: null,
                     motion_report: null}
