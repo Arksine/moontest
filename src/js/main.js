@@ -493,7 +493,7 @@ function get_server_info() {
     .then((result) => {
         list_announcements();
         if (result.klippy_state != "disconnected" && websocket != null)
-                websocket.connect_bridge();
+            websocket.connect_bridge();
         if (result.klippy_state == "ready") {
             get_klippy_info();
             if (!klippy_ready) {
@@ -1172,10 +1172,10 @@ function encode_filename(path) {
     return fname;
 }
 
-function run_request(url, method, callback=null, check_jwt=true)
+function run_request(url, method, callback=null, err_cb=null, check_jwt=true)
 {
     if (check_jwt && need_jwt_refresh("access_token")) {
-        refresh_json_web_token(run_request, url, method, callback, false);
+        refresh_json_web_token(run_request, url, method, callback, err_cb, false);
         return;
     }
     let settings = {
@@ -1185,7 +1185,7 @@ function run_request(url, method, callback=null, check_jwt=true)
             401: function() {
                 if (token_data.refresh_token != null) {
                     // try the refresh again
-                    refresh_json_web_token(run_request, url, method, callback, false);
+                    refresh_json_web_token(run_request, url, method, callback, err_cb, false);
                 }
                 else {
                     token_data.access_token = null;
@@ -1199,7 +1199,13 @@ function run_request(url, method, callback=null, check_jwt=true)
             if (callback != null)
                 callback(resp)
             return false;
-        }};
+        },
+        error: (xhr, err_type, exc) => {
+            if (err_cb != null && xhr.status != 401)
+                err_cb(xhr.status, err_type);
+            return false;
+        }
+    };
     if (websocket != null && websocket.id != null) {
         let fdata = new FormData();
         fdata.append("connection_id", websocket.id);
@@ -1214,9 +1220,9 @@ function run_request(url, method, callback=null, check_jwt=true)
     $.ajax(settings);
 }
 
-function form_get_request(api_url, query_string="", callback=null) {
+function form_get_request(api_url, query_string="", callback=null, err_cb=null) {
     let url = origin + api_url + query_string;
-    run_request(url, 'GET', callback);
+    run_request(url, 'GET', callback, err_cb);
 }
 
 function form_post_request(api_url, query_string="", callback=null) {
@@ -1484,7 +1490,16 @@ class KlippyWebsocket {
                 (resp) => {
                     let token = resp.result;
                     this._create_primary_socket(token);
-                });
+                },
+                (status_code, status_resp) => {
+                    if (this.reconnect) {
+                        setTimeout(() => {
+                            if (this.reconnect)
+                                this.connect();
+                        }, 1000);
+                    }
+                }
+            );
         } else {
             this._create_primary_socket();
         }
