@@ -203,6 +203,11 @@ var api = {
     dismiss_announcement: {
         url: "/server/announcements/dismiss",
         method: "server.announcements.dismiss"
+    },
+
+    estimate: {
+        url: "/server/analysis/estimate",
+        method: "server.analysis.estimate"
     }
 }
 
@@ -777,6 +782,19 @@ function get_metadata(file_name) {
     })
     .catch((error) => {
         update_error(api.metadata.method, error);
+    });
+}
+
+function estimate_file(file_name) {
+    json_rpc.call_method_with_kwargs(
+        api.estimate.method, {'filename': file_name})
+    .then((result) => {
+        // result is an "ok" acknowledgement that the
+        // print has started
+        console.log(result);
+    })
+    .catch((error) => {
+        update_error(api.estimate.method, error);
     });
 }
 
@@ -1464,6 +1482,19 @@ function jstree_get_metadata() {
     }
 }
 
+function jstree_estimate() {
+    let filename = get_selected_item();
+    if (filename && filename.startsWith("gcodes/")) {
+        filename = filename.slice(7);
+        if (api_type == 'http') {
+            let qs = `?filename=${encode_filename(filename)}`;
+            form_post_request(api.estimate.url, qs);
+        } else {
+            estimate_file(filename);
+        }
+    }
+}
+
 //***********End JSTree Helper Functions***************************/
 
 // A simple reconnecting websocket
@@ -2026,8 +2057,12 @@ window.onload = () => {
                         }
                         actions.metadata = {
                             label: "Get Metadata",
-                            separator_after: true,
                             action: jstree_get_metadata
+                        }
+                        actions.estimate = {
+                            label: "Estimate",
+                            separator_after: true,
+                            action: jstree_estimate
                         }
                     }
                     // can delete, cut (move), copy, or rename(move)
