@@ -1872,7 +1872,18 @@ function refresh_json_web_token(callback, ...args) {
             $('.req-login').prop('disabled', false);
             if (callback != null)
                 callback(...args);
-        }).fail(() => {
+        }).fail((xhr) => {
+            if (xhr.status >= 500) {
+                // Server Error
+                if (callback == null) {
+                    console.log("Server Error during JWT refresh attempt");
+                } else {
+                    setTimeout(() => {
+                        callback(...args);
+                    }, 1000);
+                }
+                return;
+            }
             console.log("Refresh JWT Failed");
             token_data.access_token = null;
             token_data.refresh_token = null;
@@ -1881,6 +1892,16 @@ function refresh_json_web_token(callback, ...args) {
             $("#do_login").click();
         });
     } else {
+        if (websocket == null || !websocket.connected) {
+            if (callback == null) {
+                console.log("Server Error during JWT refresh attempt");
+            } else {
+                setTimeout(() => {
+                    callback(...args);
+                }, 1000);
+            }
+            return;
+        }
         let params = {refresh_token: token_data.refresh_token};
         json_rpc.call_method_with_kwargs(api.refresh_jwt.method, params)
         .then((result) => {
