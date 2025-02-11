@@ -1321,12 +1321,7 @@ function generate_children(result, parent) {
 function jstree_populate_children(node, callback) {
     if (api_type == "http") {
         let qs = `?path=${node.id}`;
-        let settings = {url: origin + api.directory.url + qs};
-        if (token_data.access_token != null)
-            settings.headers = {"Authorization": `Bearer ${token_data.access_token}`};
-        else if (apikey != null)
-            settings.headers = {"X-Api-Key": apikey};
-        $.get(settings, (resp, status) => {
+        form_get_request(api.directory.url, qs, (resp, status) => {
             callback(generate_children(resp.result, node));
             return false;
         });
