@@ -512,8 +512,6 @@ function get_server_info() {
                     const sub = {
                         objects: {
                             gcode_move: ["gcode_position", "speed", "speed_factor", "extrude_factor"],
-                            idle_timeout: null,
-                            pause_resume: null,
                             toolhead: null,
                             virtual_sdcard: null,
                             heater_bed: null,
@@ -524,7 +522,7 @@ function get_server_info() {
                         };
                     add_subscription(sub);
                 } else {
-                    get_status({idle_timeout: null, pause_resume: null});
+                    get_status({print_stats: null,});
                     websocket.create_bridge_socket()
                 }
             }
@@ -632,24 +630,20 @@ function get_status(printer_objects) {
     // be possible to subscribe to status requests and update the UI accordingly
     json_rpc.call_method_with_kwargs(api.object_status.method, printer_objects)
     .then((result) => {
-        if ("idle_timeout" in result) {
+        if ("print_stats" in result) {
             // Its a good idea that the user understands that some functionality,
             // such as file manipulation, is disabled during a print.  This can be
             // done by disabling buttons or by notifying the user via a popup if they
             // click on an action that is not allowed.
-            if ("state" in result.idle_timeout) {
-                let state = result.idle_timeout.state.toLowerCase();
+            if ("state" in result.print_stats) {
+                let state = result.print_stats.state.toLowerCase();
                 is_printing = (state == "printing");
                 if (!$('#cbxFileTransfer').is(":checked")) {
                     $('.toggleable').prop(
                         'disabled', (api_type == 'websocket' || is_printing));
                 }
                 $('#btnstartprint').prop('disabled', is_printing);
-            }
-        }
-        if ("pause_resume" in result) {
-            if ("is_paused" in result.pause_resume) {
-                paused = result.pause_resume.is_paused;
+                paused = (state == "paused")
                 let label = paused ? "Resume Print" : "Pause Print";
                 $('#btnpauseresume').text(label);
             }
@@ -977,24 +971,24 @@ function handle_status_update(status) {
                     $('#filename').prop("hidden", val == "");
                     $('#filename').text("Loaded File: " + val);
                     break;
-                case "pause_resume.is_paused":
-                    if (paused != val) {
-                        paused = val;
-                        let label = paused ? "Resume Print" : "Pause Print";
-                        $('#btnpauseresume').text(label);
-                        console.log("Paused State Changed: " + val);
-                        update_streamdiv(name, attr, val);
-                    }
-                    break;
-                case "idle_timeout.state":
+                case "print_stats.state":
                     let state = val.toLowerCase();
-                    if (state != is_printing) {
-                        is_printing = (state == "printing");
+                    let cur_printing = (state == "printing");
+                    if (cur_printing != is_printing) {
+                        is_printing = cur_printing;
                         if (!$('#cbxFileTransfer').is(":checked")) {
                             $('.toggleable').prop(
                                 'disabled', (api_type == 'websocket' || is_printing));
                         }
                         $('#btnstartprint').prop('disabled', is_printing);
+                        update_streamdiv(name, attr, val);
+                    }
+                    let cur_paused = (state == "paused")
+                    if (paused != cur_paused) {
+                        paused = cur_paused;
+                        let label = paused ? "Resume Print" : "Pause Print";
+                        $('#btnpauseresume').text(label);
+                        console.log("Paused State Changed: " + val);
                         update_streamdiv(name, attr, val);
                     }
                     break;
@@ -2341,15 +2335,13 @@ window.onload = () => {
      $('#btnsubscribe').click(() => {
         if (api_type == 'http') {
             let qs = "?gcode_move=gcode_position,speed,speed_factor,extrude_factor" +
-                    "&toolhead&virtual_sdcard&heater_bed&extruder&fan&idle_timeout&pause_resume"  +
+                    "&toolhead&virtual_sdcard&heater_bed&extruder&fan"  +
                     "&print_stats&motion_report";
             form_post_request(api.object_subscription.url, qs);
         } else {
             const sub = {
                 objects: {
                     gcode_move: ["gcode_position", "speed", "speed_factor", "extrude_factor"],
-                    idle_timeout: null,
-                    pause_resume: null,
                     toolhead: null,
                     virtual_sdcard: null,
                     heater_bed: null,
