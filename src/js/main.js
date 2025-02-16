@@ -208,6 +208,14 @@ var api = {
     estimate: {
         url: "/server/analysis/estimate",
         method: "server.analysis.estimate"
+    },
+    post_process: {
+        url: "/server/analysis/process",
+        method: "server.analysis.process"
+    },
+    metascan: {
+        url: "/server/files/metascan",
+        method: "server.files.metascan"
     }
 }
 
@@ -779,6 +787,19 @@ function get_metadata(file_name) {
     });
 }
 
+function scan_metadata(file_name) {
+    json_rpc.call_method_with_kwargs(
+        api.metascan.method, {'filename': file_name})
+    .then((result) => {
+        // result is an "ok" acknowledgement that the
+        // print has started
+        console.log(result);
+    })
+    .catch((error) => {
+        update_error(api.metascan.method, error);
+    });
+}
+
 function estimate_file(file_name) {
     json_rpc.call_method_with_kwargs(
         api.estimate.method, {'filename': file_name})
@@ -789,6 +810,19 @@ function estimate_file(file_name) {
     })
     .catch((error) => {
         update_error(api.estimate.method, error);
+    });
+}
+
+function estimator_post_process_file(file_name, force=false) {
+    json_rpc.call_method_with_kwargs(
+        api.post_process.method, {'filename': file_name, 'force': force})
+    .then((result) => {
+        // result is an "ok" acknowledgement that the
+        // print has started
+        console.log(result);
+    })
+    .catch((error) => {
+        update_error(api.post_process.method, error);
     });
 }
 
@@ -1471,6 +1505,19 @@ function jstree_get_metadata() {
     }
 }
 
+function jstree_scan_metadata() {
+    let filename = get_selected_item();
+    if (filename && filename.startsWith("gcodes/")) {
+        filename = filename.slice(7);
+        if (api_type == 'http') {
+            let qs = `?filename=${encode_filename(filename)}`;
+            form_post_request(api.metascan.url, qs);
+        } else {
+            scan_metadata(filename);
+        }
+    }
+}
+
 function jstree_estimate() {
     let filename = get_selected_item();
     if (filename && filename.startsWith("gcodes/")) {
@@ -1480,6 +1527,32 @@ function jstree_estimate() {
             form_post_request(api.estimate.url, qs);
         } else {
             estimate_file(filename);
+        }
+    }
+}
+
+function jstree_post_process() {
+    let filename = get_selected_item();
+    if (filename && filename.startsWith("gcodes/")) {
+        filename = filename.slice(7);
+        if (api_type == 'http') {
+            let qs = `?filename=${encode_filename(filename)}`;
+            form_post_request(api.post_process.url, qs);
+        } else {
+            estimator_post_process_file(filename);
+        }
+    }
+}
+
+function jstree_force_post_process() {
+    let filename = get_selected_item();
+    if (filename && filename.startsWith("gcodes/")) {
+        filename = filename.slice(7);
+        if (api_type == 'http') {
+            let qs = `?filename=${encode_filename(filename)}&force=true`;
+            form_post_request(api.post_process.url, qs);
+        } else {
+            estimator_post_process_file(filename, true);
         }
     }
 }
@@ -2069,10 +2142,22 @@ window.onload = () => {
                             label: "Get Metadata",
                             action: jstree_get_metadata
                         }
+                        actions.metascan = {
+                            label: "Scan Metadata",
+                            action: jstree_scan_metadata
+                        }
                         actions.estimate = {
                             label: "Estimate",
-                            separator_after: true,
                             action: jstree_estimate
+                        }
+                        actions.post_process = {
+                            label: "Estimator Post Process",
+                            action: jstree_post_process
+                        }
+                        actions.force_post_process = {
+                            label: "Force Estimator Post Process",
+                            separator_after: true,
+                            action: jstree_force_post_process
                         }
                     }
                     // can delete, cut (move), copy, or rename(move)
